@@ -38,6 +38,7 @@ class MITMEnv(gym.Wrapper):
 if __name__ == '__main__':
     frames = []
     states = []
+    goals = []
     with torch.no_grad():
         env = gym.make("CartPole-v1", render_mode='rgb_array')
         env = MITMEnv(env)
@@ -46,11 +47,19 @@ if __name__ == '__main__':
         state, _ = env.reset()
 
         for i in range(500):
-            state, reward, terminated, truncated, _ = env.step(torch.zeros(1,))
+            if i < 10:
+                step = 0
+            elif i < 250:
+                step = 1
+            elif i < 500:
+                step = 0
+            print(step)
+            state, reward, terminated, truncated, _ = env.step(torch.tensor(step,))
             frames.append(env.render())
             states.append(state.detach().flatten().numpy())
+            goals.append(step)
             if terminated:
                 print('fell')
                 state = env.reset()
-        PID_cartpole.save_frames_as_gif(frames, states, filename='MITM_env_push.gif')
+        PID_cartpole.save_frames_as_gif(frames, states, filename='MITM_env_push_multiple.gif', goals=goals)
     env.close()
