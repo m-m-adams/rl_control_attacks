@@ -6,21 +6,26 @@ from matplotlib import animation
 import matplotlib.pyplot as plt
 
 
-def save_frames_as_gif(frames, path='./', filename='gym_animation.gif'):
+def save_frames_as_gif(frames, state, path='./images/', filename='gym_animation.gif', modified=None):
 
     # Mess with this to change frame size
     plt.figure(figsize=(frames[0].shape[1] / 72.0,
                frames[0].shape[0] / 72.0), dpi=72)
 
     patch = plt.imshow(frames[0])
+    position  = plt.text(0, 0, f'Position {0} \nAngle {0}', bbox=dict(fill=False, edgecolor='red', linewidth=2))
+    
     plt.axis('off')
 
     def animate(i):
         patch.set_data(frames[i])
+        print(state[i])
+        position.set_text(f'Position {state[i][0]: 4.2f} \nAngle    {state[i][2]: 4.2f}')
+
 
     anim = animation.FuncAnimation(
-        plt.gcf(), animate, frames=len(frames), interval=50)
-    anim.save(path + filename, writer='imagemagick', fps=60)
+        plt.gcf(), animate, frames=len(frames))
+    anim.save(path + filename, fps=30)
 
 
 class PD:
@@ -42,7 +47,7 @@ class PIDEnv(gym.Wrapper):
     def __init__(self, env):
         super().__init__(env)
         self.controller_theta = PD(5, 100, 0)
-        self.controller_x = PD(0.1, 0.5, 0)
+        self.controller_x = PD(0.25, 0.5, 0)
         self.action_space = gym.spaces.Box(
             low=-.1, high=.1, shape=(1,), dtype=np.float32)
 
@@ -50,8 +55,10 @@ class PIDEnv(gym.Wrapper):
         return self.env.reset()
 
     def step(self, action):
+        self.controller_x.goal = action
         x, x_dot, theta, theta_dot = self.state
-        theta_action = self.controller_theta.observe(action.item()+theta)
+        print(x, theta)
+        theta_action = self.controller_theta.observe(theta)
         x_action = self.controller_x.observe(x)
         act = 1 if theta_action + x_action < 0 else 0
         state, reward, terminated, truncated, _ = self.env.step(act)
@@ -61,14 +68,18 @@ class PIDEnv(gym.Wrapper):
 
 if __name__ == '__main__':
     frames = []
+    states = []
     env = gym.make("CartPole-v1", render_mode='rgb_array')
     env = PIDEnv(env)
     state, _ = env.reset()
-    for i in range(100):
+    for i in range(500):
         state, reward, terminated, truncated, _ = env.step(np.float32(0))
         frames.append(env.render())
+        states.append(state)
         if terminated:
             print('fell')
             state = env.reset()
 
-    save_frames_as_gif(frames, 'PID_centering.gif')
+    save_frames_as_gif(frames, states, filename='PID_centering_test.gif')
+
+    
