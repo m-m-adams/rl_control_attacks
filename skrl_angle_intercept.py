@@ -104,7 +104,9 @@ cfg_ddpg["experiment"]["checkpoint_interval"] = 1500
 
 
 # Configure and instantiate the RL trainer
-def train(name='demo'):
+def train(name=None, pretrain=None):
+    if name == None:
+        name='demo'
     cfg_ddpg["experiment"]["experiment_name"] = name
     # logging to TensorBoard and write checkpoints each 300 and 1500 timesteps respectively
     cfg_ddpg["experiment"]["write_interval"] = 300
@@ -117,6 +119,8 @@ def train(name='demo'):
                       action_space=env.action_space,
                       device=device)
     trainer = SequentialTrainer(cfg=cfg_trainer, env=env, agents=agent_ddpg)
+    if pretrain:
+        agent_ddpg.load(pretrain)
 
     print(cfg_ddpg)
     # start training
@@ -151,11 +155,11 @@ def load(file='./successful_models/DDPG_max_1.pt'):
 
 if __name__ == '__main__':
     print('training')
-    if sys.argv[1]:
-        train(name = sys.argv[1])
-    else:
-        train()
+
+    train(sys.argv[1], sys.argv[2])
+
+    
 
 else:
     #agent_ddpg = load(file='./runs/demo/checkpoints/agent_1500.pt')
-    agent_ddpg = load(file='./runs/train_flat_if_speed/checkpoints/best_agent.pt')
+    agent_ddpg = load(file='./runs/r_mov_perr_min1_proper/checkpoints/best_agent.pt')

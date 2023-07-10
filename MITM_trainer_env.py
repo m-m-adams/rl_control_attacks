@@ -5,6 +5,11 @@ import numpy as np
 from PID_cartpole import PD
 import matplotlib.pyplot as plt
 
+#This function is 1 around zero and for high x, 0 at small x
+#basically two dips around x=1 and -1
+def small_err_func(x):
+    return (x**4 - 2*(x**2) + 1) / ((x**4) + 1)
+
 
 class PIDEnvTrainer(gym.Wrapper):
     def __init__(self, env):
@@ -35,8 +40,11 @@ class PIDEnvTrainer(gym.Wrapper):
         act = 1 if theta_action + x_action < 0 else 0
         state, reward, terminated, truncated, _ = self.env.step(act)
         speed = state[1]
+        position = state[2]
+        moving = 2 if abs(speed) > 0.1 else 0
+        position_err = (self.goal - position)**2
 
-        reward += 1 if abs(speed) >0.5 else 0
+        reward = 1-small_err_func(position_err/10)
 
         self.steps += 1
 
