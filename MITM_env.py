@@ -40,7 +40,7 @@ if __name__ == '__main__':
     states = []
     goals = []
     with torch.no_grad():
-        env = gym.make("CartPole-v1", render_mode='rgb_array')
+        env = gym.make("CartPole-v1", render_mode='human')
         env = MITMEnv(env)
         env = PID_cartpole.PIDEnv(env)
         env = wrap_env(env)
@@ -53,7 +53,6 @@ if __name__ == '__main__':
                 step = 1
             elif i < 500:
                 step = 0
-            print(step)
             state, reward, terminated, truncated, _ = env.step(torch.tensor(step,))
             frames.append(env.render())
             states.append(state.detach().flatten().numpy())
@@ -61,5 +60,5 @@ if __name__ == '__main__':
             if terminated:
                 print('fell')
                 state = env.reset()
-        PID_cartpole.save_frames_as_gif(frames, states, filename='MITM_env_push_multiple.gif', goals=goals)
+        #PID_cartpole.save_frames_as_gif(frames, states, filename='MITM_env_push_multiple.gif', goals=goals)
     env.close()

@@ -1,10 +1,10 @@
 import gymnasium as gym
-
+import sys
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
-import PID_cartpole
+import MITM_trainer_env
 # Import the skrl components to build the RL system
 from skrl.models.torch import Model, DeterministicMixin
 from skrl.memories.torch import RandomMemory
@@ -12,7 +12,15 @@ from skrl.agents.torch.ddpg import DDPG, DDPG_DEFAULT_CONFIG
 from skrl.resources.noises.torch import OrnsteinUhlenbeckNoise
 from skrl.trainers.torch import SequentialTrainer
 from skrl.envs.torch import wrap_env
+#device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+dstr = 'cpu'
+if torch.cuda.is_available():
+    dstr = 'cuda'
+elif torch.backends.mps.is_available():
+    dstr = 'mps'
+device = torch.device(dstr)
+print(dstr)
 
 # Define the models (deterministic models) for the DDPG agent using mixin
 # - Actor (policy): takes as input the environment's observation/state and returns an action
@@ -27,7 +35,8 @@ class DeterministicActor(DeterministicMixin, Model):
         self.action_layer = nn.Linear(10, self.num_actions)
 
     def compute(self, inputs, role):
-        x = F.relu(self.linear_layer_1(inputs["states"]))
+        states = inputs["states"].to(device)
+        x = F.relu(self.linear_layer_1(states))
         x = F.relu(self.linear_layer_2(x))
         # Pendulum-v1 action_space is -2 to 2
         return 2 * torch.tanh(self.action_layer(x)), {}
@@ -54,9 +63,9 @@ class DeterministicCritic(DeterministicMixin, Model):
 # Note: the environment version may change depending on the gymnasium version
 #env = gym.make('MountainCarContinuous-v0')
 env = gym.make("CartPole-v1")
-env = PID_cartpole.PIDEnv(env)
+env = MITM_trainer_env.PIDEnvTrainer(env)
 env = wrap_env(env)
-device = env.device
+#env.to(device)
 
 
 # Instantiate a RandomMemory (without replacement) as experience replay memory
@@ -142,7 +151,11 @@ def load(file='./successful_models/DDPG_max_1.pt'):
 
 if __name__ == '__main__':
     print('training')
-    train()
+    if sys.argv[1]:
+        train(name = sys.argv[1])
+    else:
+        train()
 
 else:
-    agent_ddpg = load()
+    #agent_ddpg = load(file='./runs/demo/checkpoints/agent_1500.pt')
+    agent_ddpg = load(file='./runs/train_flat_if_speed/checkpoints/best_agent.pt')

@@ -49,9 +49,9 @@ class PIDEnv(gym.Wrapper):
     def __init__(self, env):
         super().__init__(env)
         self.controller_theta = PD(5, 100, 0)
-        self.controller_x = PD(5, 50, 0)
+        self.controller_x = PD(1, 50, 0)
         self.action_space = gym.spaces.Box(
-            low=-.1, high=.1, shape=(1,), dtype=np.float32)
+            low=-1, high=1, shape=(1,), dtype=np.float32)
 
     def reset(self):
         return self.env.reset()
@@ -59,7 +59,6 @@ class PIDEnv(gym.Wrapper):
     def step(self, action):
         self.controller_x.goal = action
         x, x_dot, theta, theta_dot = self.state
-        print(x, theta)
         theta_action = self.controller_theta.observe(theta)
         x_action = self.controller_x.observe(x)
         act = 1 if theta_action + x_action < 0 else 0
