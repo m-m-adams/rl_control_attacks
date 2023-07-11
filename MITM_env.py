@@ -1,5 +1,5 @@
 # %%
-import skrl_angle_intercept as trained
+import train_and_view as trained
 import PID_cartpole
 import torch
 import gymnasium as gym
@@ -10,9 +10,9 @@ from skrl.envs.torch import wrap_env
 
 
 class MITMEnv(gym.Wrapper):
-    def __init__(self, env):
+    def __init__(self, env, agent_path):
         super().__init__(env)
-        self.agent = trained.agent_ddpg
+        self.agent = trained.load(file=agent_path)
         self.agent.init()
         self._env = wrap_env(env)
         self.action_space = gym.spaces.Discrete(2)
@@ -35,30 +35,4 @@ class MITMEnv(gym.Wrapper):
         return state, reward, terminated, truncated, _
 
 
-if __name__ == '__main__':
-    frames = []
-    states = []
-    goals = []
-    with torch.no_grad():
-        env = gym.make("CartPole-v1", render_mode='human')
-        env = MITMEnv(env)
-        env = PID_cartpole.PIDEnv(env)
-        env = wrap_env(env)
-        state, _ = env.reset()
 
-        for i in range(500):
-            if i < 10:
-                step = 0
-            elif i < 250:
-                step = 1
-            elif i < 500:
-                step = 0
-            state, reward, terminated, truncated, _ = env.step(torch.tensor(step,))
-            frames.append(env.render())
-            states.append(state.detach().flatten().numpy())
-            goals.append(step)
-            if terminated:
-                print('fell')
-                state = env.reset()
-        #PID_cartpole.save_frames_as_gif(frames, states, filename='MITM_env_push_multiple.gif', goals=goals)
-    env.close()

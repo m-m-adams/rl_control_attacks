@@ -4,7 +4,10 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
+import argparse
 import MITM_trainer_env
+import MITM_env
+import PID_cartpole
 # Import the skrl components to build the RL system
 from skrl.models.torch import Model, DeterministicMixin
 from skrl.memories.torch import RandomMemory
@@ -144,22 +147,56 @@ def load(file='./successful_models/DDPG_max_1.pt'):
     agent_ddpg.load(file)
     return agent_ddpg
 
+def sim_and_render(agent_path='./runs/r_mov_slow/checkpoints/best_agent.pt', save_path=None):
+    r = 'human'
+    if save_path:
+        frames = []
+        states = []
+        goals = []
+        r = 'rgb_array'
+    with torch.no_grad():
+        env = gym.make("CartPole-v1", render_mode=r)
+        env = MITM_env.MITMEnv(env, agent_path)
+        env = PID_cartpole.PIDEnv(env)
+        env = wrap_env(env)
+        state, _ = env.reset()
 
-# env = gym.make("CartPole-v1", render_mode='human')
-# env = PID_cartpole.PIDEnv(env)
-# env = wrap_env(env)
-# device = env.device
-
-# trainer = SequentialTrainer(cfg=cfg_trainer, env=env, agents=agent_ddpg)
-# trainer.eval()
+        for i in range(500):
+            if i < 10:
+                step = 0
+            elif i < 250:
+                step = 1
+            elif i < 500:
+                step = 0
+            state, reward, terminated, truncated, _ = env.step(torch.tensor(step,))
+            if save_path:
+                frames.append(env.render())
+                states.append(state.detach().flatten().numpy())
+                goals.append(step)
+            if terminated:
+                print('fell')
+                state = env.reset()
+        if save_path:
+            PID_cartpole.save_frames_as_gif(frames, states, filename='MITM_env_push_multiple.gif', goals=goals)
+    env.close()
 
 if __name__ == '__main__':
-    print('training')
+    parser = argparse.ArgumentParser()
+    parser.add_argument('experiment', type=str)
+    parser.add_argument('-b', '--bootstrap', type=str)
+    parser.add_argument('-r', '--render', action="store_true")
+    args = parser.parse_args()
 
-    train(sys.argv[1], sys.argv[2])
-
-    
-
-else:
-    #agent_ddpg = load(file='./runs/demo/checkpoints/agent_1500.pt')
-    agent_ddpg = load(file='./runs/r_mov_perr_min1_proper/checkpoints/best_agent.pt')
+    if args.render:
+        exp = args.experiment
+        if exp.endswith('.pt'):
+            agent_path = exp
+        else:
+            agent_path = f'./runs/{args.experiment}/checkpoints/best_agent.pt'
+        sim_and_render(agent_path)
+    else:
+        if args.bootstrap.endswith('.pt'):
+            agent_path = args.bootstrap
+        else:
+            agent_path = f'./runs/{args.bootstrap}/checkpoints/best_agent.pt'
+        train(args.experiment, agent_path)

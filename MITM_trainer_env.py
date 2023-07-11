@@ -41,10 +41,10 @@ class PIDEnvTrainer(gym.Wrapper):
         state, reward, terminated, truncated, _ = self.env.step(act)
         speed = state[1]
         position = state[2]
-        moving = 2 if abs(speed) > 0.1 else 0
+        moving = 2 if abs(speed) > 0.05 else 0
         position_err = (self.goal - position)**2
 
-        reward = 1-small_err_func(position_err/10)
+        reward = 1-small_err_func(position_err/20)
 
         self.steps += 1
 
