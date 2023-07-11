@@ -49,7 +49,7 @@ class PIDEnv(gym.Wrapper):
     def __init__(self, env):
         super().__init__(env)
         self.controller_theta = PD(5, 100, 0)
-        self.controller_x = PD(1, 50, 0)
+        self.controller_x = PD(1, 80, 0)
         self.action_space = gym.spaces.Box(
             low=-1, high=1, shape=(1,), dtype=np.float32)
 
@@ -74,14 +74,11 @@ if __name__ == '__main__':
     env = gym.make("CartPole-v1", render_mode='rgb_array')
     env = PIDEnv(env)
     state, _ = env.reset()
-    for i in range(500):
-        if i < 10:
-            step = 0
-        elif i < 250:
-            step = 1
-        elif i < 500:
-            step = 0
-        print(step)
+    for i in range(50000):
+        if i%100 == 0:
+            step = np.random.randint(-1,1)
+
+    
         state, reward, terminated, truncated, _ = env.step(np.float32(step))
         frames.append(env.render())
         states.append(state)
@@ -90,6 +87,5 @@ if __name__ == '__main__':
             print('fell')
             state = env.reset()
 
-    save_frames_as_gif(frames, states, filename='PID_centering_test.gif', goals=goals)
 
     

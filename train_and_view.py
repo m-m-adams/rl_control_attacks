@@ -1,3 +1,5 @@
+#!python3
+
 import gymnasium as gym
 import sys
 import torch
@@ -13,8 +15,10 @@ from skrl.models.torch import Model, DeterministicMixin
 from skrl.memories.torch import RandomMemory
 from skrl.agents.torch.ddpg import DDPG, DDPG_DEFAULT_CONFIG
 from skrl.resources.noises.torch import OrnsteinUhlenbeckNoise
-from skrl.trainers.torch import SequentialTrainer
+from skrl.trainers.torch import SequentialTrainer, ParallelTrainer
 from skrl.envs.torch import wrap_env
+from skrl.resources.noises.torch import GaussianNoise
+from torch.optim.lr_scheduler import StepLR
 #device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 dstr = 'cpu'
@@ -61,15 +65,9 @@ class DeterministicCritic(DeterministicMixin, Model):
         x = F.relu(self.linear_layer_2(x))
         return self.linear_layer_3(x), {}
 
-
-# Load and wrap the Gymnasium environment.
-# Note: the environment version may change depending on the gymnasium version
-#env = gym.make('MountainCarContinuous-v0')
 env = gym.make("CartPole-v1")
 env = MITM_trainer_env.PIDEnvTrainer(env)
 env = wrap_env(env)
-#env.to(device)
-
 
 # Instantiate a RandomMemory (without replacement) as experience replay memory
 memory = RandomMemory(memory_size=15000, num_envs=env.num_envs,
@@ -93,23 +91,24 @@ models_ddpg["target_critic"] = DeterministicCritic(
 for model in models_ddpg.values():
     model.init_parameters(method_name="normal_", mean=0.0, std=0.1)
 
-
-# Configure and instantiate the agent.
-# Only modify some of the default configuration, visit its documentation to see all the options
-# https://skrl.readthedocs.io/en/latest/modules/skrl.agents.ddpg.html#configuration-and-hyperparameters
-cfg_ddpg = DDPG_DEFAULT_CONFIG.copy()
-cfg_ddpg["random_timesteps"] = 100
-cfg_ddpg["learning_starts"] = 0
-cfg_ddpg["experiment"]["experiment_name"] = 'reward_max_at_one'
-# logging to TensorBoard and write checkpoints each 300 and 1500 timesteps respectively
-cfg_ddpg["experiment"]["write_interval"] = 300
-cfg_ddpg["experiment"]["checkpoint_interval"] = 1500
-
-
 # Configure and instantiate the RL trainer
 def train(name=None, pretrain=None):
+
+    
     if name == None:
         name='demo'
+    cfg_ddpg = DDPG_DEFAULT_CONFIG.copy()
+    cfg_ddpg["exploration"]["noise"] = GaussianNoise(mean=0, std=0.05, device=device)    
+    cfg_ddpg["random_timesteps"] = 1000
+    cfg_ddpg["learning_starts"] = 0
+    cfg_ddpg["experiment"]["experiment_name"] = 'reward_max_at_one'
+    # logging to TensorBoard and write checkpoints each 300 and 1500 timesteps respectively
+    cfg_ddpg["experiment"]["write_interval"] = 300
+    cfg_ddpg["experiment"]["checkpoint_interval"] = 1500
+
+
+    #cfg_ddpg["learning_rate_scheduler"] = StepLR
+    #cfg_ddpg["learning_rate_scheduler_kwargs"] = {"step_size": 1000, "gamma": 0.9}
     cfg_ddpg["experiment"]["experiment_name"] = name
     # logging to TensorBoard and write checkpoints each 300 and 1500 timesteps respectively
     cfg_ddpg["experiment"]["write_interval"] = 300
@@ -133,10 +132,12 @@ def train(name=None, pretrain=None):
 
 
 def load(file='./successful_models/DDPG_max_1.pt'):
-    cfg_ddpg["experiment"]["experiment_name"] = 'demo animation'
     # logging to TensorBoard and write checkpoints each 300 and 1500 timesteps respectively
-    cfg_ddpg["experiment"]["write_interval"] = 300
-    cfg_ddpg["experiment"]["checkpoint_interval"] = 1500
+
+    cfg_ddpg = DDPG_DEFAULT_CONFIG.copy()
+    cfg_ddpg["random_timesteps"] = 0
+    cfg_ddpg["learning_starts"] = 10000
+    cfg_ddpg["experiment"]["experiment_name"] = 'demo animation'
 
     agent_ddpg = DDPG(models=models_ddpg,
                       memory=memory,
@@ -186,17 +187,19 @@ if __name__ == '__main__':
     parser.add_argument('-b', '--bootstrap', type=str)
     parser.add_argument('-r', '--render', action="store_true")
     args = parser.parse_args()
-
+    boots = args.bootstrap
     if args.render:
         exp = args.experiment
         if exp.endswith('.pt'):
             agent_path = exp
         else:
-            agent_path = f'./runs/{args.experiment}/checkpoints/best_agent.pt'
+            agent_path = f'./successful_models/{exp}/checkpoints/best_agent.pt'
         sim_and_render(agent_path)
-    else:
-        if args.bootstrap.endswith('.pt'):
-            agent_path = args.bootstrap
+    elif boots:
+        if boots.endswith('.pt'):
+            agent_path = boots
         else:
-            agent_path = f'./runs/{args.bootstrap}/checkpoints/best_agent.pt'
+            agent_path =  f'./successful_models/{boots}.pt'
         train(args.experiment, agent_path)
+    else:
+        train(args.experiment)
