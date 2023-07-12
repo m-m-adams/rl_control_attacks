@@ -6,7 +6,7 @@ from matplotlib import animation
 import matplotlib.pyplot as plt
 
 
-def save_frames_as_gif(frames, state, path='./images/', filename='gym_animation.gif', goals=None):
+def save_frames_as_gif(frames, state, path='./images', filename='gym_animation.gif', goals=None):
 
 
     # Mess with this to change frame size
@@ -20,7 +20,6 @@ def save_frames_as_gif(frames, state, path='./images/', filename='gym_animation.
 
     def animate(i):
         patch.set_data(frames[i])
-        print(state[i])
         position.set_text(f'Position {state[i][0]: 4.2f} \nAngle    {state[i][2]: 4.2f}')
         if goals:
             position.set_text(f'Position {state[i][0]: 4.2f} \nAngle    {state[i][2]: 4.2f} \nCommand  {goals[i]: 4.2f}')
@@ -28,20 +27,24 @@ def save_frames_as_gif(frames, state, path='./images/', filename='gym_animation.
 
     anim = animation.FuncAnimation(
         plt.gcf(), animate, frames=len(frames))
-    anim.save(path + filename, fps=30)
+    anim.save(path + '/' + filename, fps=30)
 
 
 class PD:
-    def __init__(self, kp, kd, goal):
+    def __init__(self, kp, kd, goal, clip=None):
         self.kp = kp
         self.kd = kd
         self.goal = goal
+        self.clip = clip
+
         self.last_error = 0
 
     def observe(self, x):
         error = self.goal - x
         d_error = error - self.last_error
         self.last_error = error
+        if self.clip:
+            error = max(min(error, self.clip), -self.clip)
         return self.kp * error + self.kd * d_error
 
 
@@ -49,7 +52,7 @@ class PIDEnv(gym.Wrapper):
     def __init__(self, env):
         super().__init__(env)
         self.controller_theta = PD(5, 100, 0)
-        self.controller_x = PD(1, 80, 0)
+        self.controller_x = PD(1, 75, 0, 0.5)
         self.action_space = gym.spaces.Box(
             low=-1, high=1, shape=(1,), dtype=np.float32)
 
@@ -71,12 +74,12 @@ if __name__ == '__main__':
     frames = []
     states = []
     goals = []
-    env = gym.make("CartPole-v1", render_mode='rgb_array')
+    env = gym.make("CartPole-v1", render_mode='human')
     env = PIDEnv(env)
     state, _ = env.reset()
     for i in range(50000):
         if i%100 == 0:
-            step = np.random.randint(-1,1)
+            step = np.random.randint(-2,3)
 
     
         state, reward, terminated, truncated, _ = env.step(np.float32(step))
