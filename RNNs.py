@@ -72,7 +72,7 @@ class Actor(DeterministicMixin, Model):
         }  # hidden states (D ∗ num_layers, N, Hout)
 
     def compute(self, inputs, role):
-        states = inputs["states"]
+        states = inputs["states"].to(self.device)
         terminated = inputs.get("terminated", None)
         hidden_states = inputs["rnn"][0]
 

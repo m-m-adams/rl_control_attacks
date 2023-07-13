@@ -11,6 +11,8 @@ import MITM_trainer_env
 import MITM_env
 import PID_cartpole
 import os
+import RNNs
+import MLPs
 
 # Import the skrl components to build the RL system
 import skrl
@@ -35,85 +37,6 @@ device = torch.device(dstr)
 print(dstr)
 
 
-# Define the models (deterministic models) for the DDPG agent using mixin
-# - Actor (policy): takes as input the environment's observation/state and returns an action
-# - Critic: takes the state and action as input and provides a value to guide the policy
-class DeterministicActor(DeterministicMixin, Model):
-    def __init__(self, observation_space, action_space, device, clip_actions=False):
-        Model.__init__(self, observation_space, action_space, device)
-        DeterministicMixin.__init__(self, clip_actions)
-
-        self.linear_layer_1 = nn.Linear(self.num_observations, 10)
-        self.linear_layer_2 = nn.Linear(10, 10)
-        self.action_layer = nn.Linear(10, self.num_actions)
-
-    def compute(self, inputs, role):
-        states = inputs["states"].to(device)
-        x = F.relu(self.linear_layer_1(states))
-        x = F.relu(self.linear_layer_2(x))
-        # action space is 1 - -1, useful action space is smaller
-        return 0.5 * torch.tanh(self.action_layer(x)), {}
-
-
-class DeterministicCritic(DeterministicMixin, Model):
-    def __init__(self, observation_space, action_space, device, clip_actions=False):
-        Model.__init__(self, observation_space, action_space, device)
-        DeterministicMixin.__init__(self, clip_actions)
-
-        self.linear_layer_1 = nn.Linear(self.num_observations + self.num_actions, 10)
-        self.linear_layer_2 = nn.Linear(10, 10)
-        self.linear_layer_3 = nn.Linear(10, 1)
-
-    def compute(self, inputs, role):
-        x = F.relu(
-            self.linear_layer_1(
-                torch.cat([inputs["states"], inputs["taken_actions"]], dim=1)
-            )
-        )
-        x = F.relu(self.linear_layer_2(x))
-        return self.linear_layer_3(x), {}
-
-
-def init_models(env, pretrain_path=None):
-    # Instantiate the agent's models (function approximators).
-    # DDPG requires 4 models, visit its documentation for more details
-    # https://skrl.readthedocs.io/en/latest/modules/skrl.agents.ddpg.html#spaces-and-models
-    models_ddpg = {}
-    models_ddpg["policy"] = DeterministicActor(
-        env.observation_space, env.action_space, device
-    )
-    models_ddpg["target_policy"] = DeterministicActor(
-        env.observation_space, env.action_space, device
-    )
-    models_ddpg["critic"] = DeterministicCritic(
-        env.observation_space, env.action_space, device
-    )
-    models_ddpg["target_critic"] = DeterministicCritic(
-        env.observation_space, env.action_space, device
-    )
-
-    # Initialize the models' parameters (weights and biases) using a Gaussian distribution
-    for model in models_ddpg.values():
-        model.init_parameters(method_name="normal_", mean=0.0, std=0.1)
-    return models_ddpg
-
-
-def load_models(path, action_space, observation_space):
-    models_ddpg = {}
-    models_ddpg["policy"] = DeterministicActor(observation_space, action_space, device)
-    models_ddpg["target_policy"] = DeterministicActor(
-        observation_space, action_space, device
-    )
-    models_ddpg["critic"] = DeterministicCritic(observation_space, action_space, device)
-    models_ddpg["target_critic"] = DeterministicCritic(
-        observation_space, action_space, device
-    )
-
-    old = DDPG(models=models_ddpg)
-    old.load(path)
-    return old.models
-
-
 # Configure and instantiate the RL trainer
 def train(name=None, pretrain=None):
     env = gym.make("CartPole-v1", render_mode="rgb_array")
@@ -127,32 +50,30 @@ def train(name=None, pretrain=None):
         memory_size=15000, num_envs=env.num_envs, device=device, replacement=False
     )
     cfg_ddpg = DDPG_DEFAULT_CONFIG.copy()
-    cfg_ddpg["exploration"]["noise"] = GaussianNoise(mean=0, std=1, device=device)
-    # 1e-1 works well for initial shape, too much for finalizing
-    cfg_ddpg["exploration"]["initial_scale"] = 1
-    # 1e-4 is good for final pretrain
-    cfg_ddpg["exploration"]["final_scale"] = 1e-6
-    cfg_ddpg["random_timesteps"] = 1000
-    cfg_ddpg["actor_learning_rate"] = 1e-3  # actor learning rate
-    cfg_ddpg["critic_learning_rate"] = 1e-3  # critic learning rate
-    cfg_ddpg["experiment"]["experiment_name"] = "reward_max_at_one"
+    cfg_ddpg["exploration"]["noise"] = OrnsteinUhlenbeckNoise(
+        theta=0.15, sigma=0.1, base_scale=1.0, device=device
+    )
+    cfg_ddpg["discount_factor"] = 0.98
+    cfg_ddpg["batch_size"] = 100
+    cfg_ddpg["random_timesteps"] = 0
+    cfg_ddpg["learning_starts"] = 1000
+    cfg_ddpg["experiment"]["experiment_name"] = name
     cfg_ddpg["experiment"]["store_seperately"] = True
     # logging to TensorBoard and write checkpoints each 300 and 1500 timesteps respectively
     cfg_ddpg["experiment"]["write_interval"] = 300
     cfg_ddpg["experiment"]["checkpoint_interval"] = 1500
 
-    cfg_ddpg["learning_rate_scheduler"] = StepLR
-    cfg_ddpg["learning_rate_scheduler_kwargs"] = {"step_size": 1000, "gamma": 0.95}
-    cfg_ddpg["experiment"]["experiment_name"] = name
-    # logging to TensorBoard and write checkpoints each 300 and 1500 timesteps respectively
+    # cfg_ddpg["learning_rate_scheduler"] = StepLR
+    # cfg_ddpg["learning_rate_scheduler_kwargs"] = {"step_size": 1000, "gamma": 0.95}
 
-    cfg_ddpg["experiment"]["checkpoint_interval"] = 1500
     cfg_trainer = {"timesteps": 100000, "headless": True}
 
     if pretrain:
-        models_ddpg = load_models(pretrain, env.action_space, env.observation_space)
+        models_ddpg = MLPs.load_models(
+            pretrain, env.action_space, env.observation_space, device
+        )
     else:
-        models_ddpg = init_models(env)
+        models_ddpg = RNNs.init_models(env, device)
 
     agent_ddpg = DDPG(
         models=models_ddpg,
@@ -172,7 +93,7 @@ def train(name=None, pretrain=None):
 
 def load(action_space, observation_space, file="./successful_models/DDPG_max_1.pt"):
     # logging to TensorBoard and write checkpoints each 300 and 1500 timesteps respectively
-    models_ddpg = load_models(file, action_space, observation_space)
+    models_ddpg = MLPs.load_models(file, action_space, observation_space)
     cfg_ddpg = DDPG_DEFAULT_CONFIG.copy()
     cfg_ddpg["random_timesteps"] = 0
     cfg_ddpg["learning_starts"] = 10000
