@@ -84,7 +84,7 @@ def init_models(env, pretrain_path=None):
 
         # Initialize the models' parameters (weights and biases) using a Gaussian distribution
     for model in models_ddpg.values():
-        model.init_parameters(method_name="normal_", mean=0.0, std=0.001)
+        model.init_parameters(method_name="normal_", mean=0.0, std=0.1)
     return models_ddpg
 
 def load_models(path, action_space, observation_space):
@@ -116,12 +116,12 @@ def train(name=None, pretrain=None):
     cfg_ddpg = DDPG_DEFAULT_CONFIG.copy()
     cfg_ddpg["exploration"]["noise"] = GaussianNoise(mean=0, std=1, device=device)
     #1e-1 works well for initial shape, too much for finalizing
-    cfg_ddpg["exploration"]["initial_scale"] = 0.5
+    cfg_ddpg["exploration"]["initial_scale"] = 1
     #1e-4 is good for final pretrain
-    cfg_ddpg["exploration"]["final_scale"] = 1e-4
+    cfg_ddpg["exploration"]["final_scale"] = 1e-6
     cfg_ddpg["random_timesteps"] = 0
-    cfg_ddpg["actor_learning_rate"] = 1e-4    # actor learning rate
-    cfg_ddpg["critic_learning_rate"] = 1e-4   # critic learning rate
+    cfg_ddpg["actor_learning_rate"] = 1e-2    # actor learning rate
+    cfg_ddpg["critic_learning_rate"] = 1e-2   # critic learning rate
     cfg_ddpg["experiment"]["experiment_name"] = 'reward_max_at_one'
     cfg_ddpg['experiment']['store_seperately'] = True
     # logging to TensorBoard and write checkpoints each 300 and 1500 timesteps respectively
@@ -135,7 +135,7 @@ def train(name=None, pretrain=None):
     # logging to TensorBoard and write checkpoints each 300 and 1500 timesteps respectively
     
     cfg_ddpg["experiment"]["checkpoint_interval"] = 1500
-    cfg_trainer = {"timesteps": 50000, "headless": True}
+    cfg_trainer = {"timesteps": 100000, "headless": True}
 
     if pretrain:
         models_ddpg = load_models(pretrain, env.action_space, env.observation_space)
@@ -186,19 +186,22 @@ def sim_and_render(agent_path='./runs/r_mov_slow/checkpoints/best_agent.pt', sav
         frames = []
         states = []
         goals = []
+        attacks = []
         r = 'rgb_array'
         os.makedirs(save_path)
     with torch.no_grad():
         env = gym.make("CartPole-v1", render_mode=r)
-        env = MITM_env.MITMEnv(env, agent_path)
+        env = MITM_env.MITMEnv(env, agent_path, noise_path='./successful_models/blind/unlimited_actions.pt')
         env = PID_cartpole.PIDEnv(env)
         env = wrap_env(env)
         state, _ = env.reset()
         step=0
-        for i in range(5000):
+        for i in range(10000):
             if i%100 == 0:
                 step = np.random.randint(-2,3)
-            state, reward, terminated, truncated, _ = env.step(torch.tensor(step, dtype=torch.float32))
+
+            state, reward, terminated, truncated, _ = env.step(torch.tensor(step, dtype=torch.int))
+
             if save_path:
                 frames.append(env.render())
                 states.append(state.detach().flatten().numpy())
@@ -207,10 +210,10 @@ def sim_and_render(agent_path='./runs/r_mov_slow/checkpoints/best_agent.pt', sav
                 print('fell')
                 state = env.reset()
         if save_path:
-
+            np.savetxt(f'{save_path}/states.csv', states, delimiter=',', header='Position , Speed, Angle, Angular speed, attack')
+            np.savetxt(f'{save_path}/goals.csv', goals, delimiter=',', header='Command')
             PID_cartpole.save_frames_as_gif(frames, states, path=save_path, goals=goals)
-            np.savetxt(f'{save_path}/states.csv', states)
-            np.savetxt(f'{save_path}/goals.csv', goals)
+
 
     env.close()
 

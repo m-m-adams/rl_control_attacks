@@ -59,7 +59,9 @@ class PIDEnv(gym.Wrapper):
     def reset(self):
         return self.env.reset()
 
-    def step(self, action):
+    def step(self, action, noise=False):
+        if noise==True:
+            return self.noise_step()
         self.controller_x.goal = action
         x, x_dot, theta, theta_dot = self.state
         theta_action = self.controller_theta.observe(theta)
@@ -68,6 +70,7 @@ class PIDEnv(gym.Wrapper):
         state, reward, terminated, truncated, _ = self.env.step(act)
         reward = 1-np.abs(1-state[0])
         return state, reward, terminated, truncated, _
+
 
 
 if __name__ == '__main__':

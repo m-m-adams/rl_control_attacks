@@ -17,6 +17,7 @@ class PIDEnvTrainer(gym.Wrapper):
         self.controller_x = PD(.75, 75, 0, 0.5)
         self.goal = 0
         self.steps = 0
+        self.sum_errors = 0
         self.action_space = gym.spaces.Box(
             low=-1, high=1, shape=(1,), dtype=np.float32)
         high = np.array(
@@ -34,19 +35,21 @@ class PIDEnvTrainer(gym.Wrapper):
 
     def reset(self):
         self.steps = 0
+        self.sum_errors = 0
         state, info = self.env.reset()
         state = np.append(state, 0)
         return state, info
 
     #action represents a sensor modification
     def step(self, action):
+        err = action.item()
         #provide input to the PID control layer
         if self.steps%100 == 0:
             self.goal = np.random.randint(-2,3)
             self.controller_x.goal = self.goal
     
         x, x_dot, theta, theta_dot = self.state
-        theta_action = self.controller_theta.observe(theta-action.item())
+        theta_action = self.controller_theta.observe(theta-err)
         x_action = self.controller_x.observe(x)
         act = 1 if theta_action + x_action < 0 else 0
         state, reward, terminated, truncated, _ = self.env.step(act)
@@ -55,8 +58,9 @@ class PIDEnvTrainer(gym.Wrapper):
         state = np.append(state, self.goal)
         position_err = (self.goal - position)
 
-        #reward = 10-5*small_err_func(position_err*5)-10*abs(action.item())
-        reward = 10-10*(action.item()**2)
+        #reward = 10-5*small_err_func(position_err*5)-10*abs(err)
+        reward = 20-5*(err**2)-5*(self.sum_errors**2)
+        self.sum_errors += err
 
         self.steps += 1
         if terminated and self.steps < 500:
