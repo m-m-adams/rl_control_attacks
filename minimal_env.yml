@@ -1,8 +1,11 @@
 name: /Users/mark/code/control_attacks/.env
 channels:
   - conda-forge
+  - pytorch
+  - nvidia
 dependencies:
-  - pytorch::pytorch
+  - pytorch
+  - pytorch-cuda
   - numpy
   - ipython
   - jupyter
