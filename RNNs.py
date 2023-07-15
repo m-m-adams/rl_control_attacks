@@ -40,7 +40,7 @@ class Actor(DeterministicMixin, Model):
         clip_actions=False,
         num_envs=1,
         num_layers=1,
-        hidden_size=400,
+        hidden_size=10,
         sequence_length=20,
     ):
         Model.__init__(self, observation_space, action_space, device)
@@ -58,9 +58,9 @@ class Actor(DeterministicMixin, Model):
             batch_first=True,
         )  # batch_first -> (batch, sequence, features)
 
-        self.linear_layer_1 = nn.Linear(self.hidden_size, 400)
-        self.linear_layer_2 = nn.Linear(400, 300)
-        self.action_layer = nn.Linear(300, self.num_actions)
+        self.linear_layer_1 = nn.Linear(self.hidden_size, 10)
+        self.linear_layer_2 = nn.Linear(10, 10)
+        self.action_layer = nn.Linear(10, self.num_actions)
 
     def get_specification(self):
         # batch size (N) is the number of envs
@@ -72,7 +72,7 @@ class Actor(DeterministicMixin, Model):
         }  # hidden states (D ∗ num_layers, N, Hout)
 
     def compute(self, inputs, role):
-        states = inputs["states"].to(self.device)
+        states = inputs["states"]
         terminated = inputs.get("terminated", None)
         hidden_states = inputs["rnn"][0]
 
@@ -132,7 +132,7 @@ class Actor(DeterministicMixin, Model):
         x = F.relu(self.linear_layer_2(x))
 
         # Pendulum-v1 action_space is -2 to 2
-        return 0.5 * torch.tanh(self.action_layer(x)), {"rnn": [hidden_states]}
+        return self.action_layer(x), {"rnn": [hidden_states]}
 
 
 class Critic(DeterministicMixin, Model):
@@ -144,7 +144,7 @@ class Critic(DeterministicMixin, Model):
         clip_actions=False,
         num_envs=1,
         num_layers=1,
-        hidden_size=400,
+        hidden_size=10,
         sequence_length=20,
     ):
         Model.__init__(self, observation_space, action_space, device)
@@ -162,9 +162,9 @@ class Critic(DeterministicMixin, Model):
             batch_first=True,
         )  # batch_first -> (batch, sequence, features)
 
-        self.linear_layer_1 = nn.Linear(self.hidden_size + self.num_actions, 400)
-        self.linear_layer_2 = nn.Linear(400, 300)
-        self.linear_layer_3 = nn.Linear(300, 1)
+        self.linear_layer_1 = nn.Linear(self.hidden_size + self.num_actions, 10)
+        self.linear_layer_2 = nn.Linear(10, 10)
+        self.linear_layer_3 = nn.Linear(10, 1)
 
     def get_specification(self):
         # batch size (N) is the number of envs

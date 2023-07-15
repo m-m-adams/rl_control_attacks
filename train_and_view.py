@@ -47,26 +47,32 @@ def train(name=None, pretrain=None):
         name = "demo"
         # Instantiate a RandomMemory (without replacement) as experience replay memory
     memory = RandomMemory(
-        memory_size=15000, num_envs=env.num_envs, device=device, replacement=False
+        memory_size=40000, num_envs=env.num_envs, device=device, replacement=False
     )
     cfg_ddpg = DDPG_DEFAULT_CONFIG.copy()
     cfg_ddpg["exploration"]["noise"] = OrnsteinUhlenbeckNoise(
         theta=0.15, sigma=0.1, base_scale=1.0, device=device
     )
+    cfg_ddpg['gradient_steps'] = 1
+    cfg_ddpg['exploration']['initial_scale'] = 1.0
+    cfg_ddpg["exploration"]["final_scale"] = 1e-3
     cfg_ddpg["discount_factor"] = 0.98
-    cfg_ddpg["batch_size"] = 100
+    cfg_ddpg["batch_size"] = 1500
     cfg_ddpg["random_timesteps"] = 0
-    cfg_ddpg["learning_starts"] = 1000
+    cfg_ddpg["learning_starts"] = 1500
+
     cfg_ddpg["experiment"]["experiment_name"] = name
     cfg_ddpg["experiment"]["store_seperately"] = True
     # logging to TensorBoard and write checkpoints each 300 and 1500 timesteps respectively
     cfg_ddpg["experiment"]["write_interval"] = 300
     cfg_ddpg["experiment"]["checkpoint_interval"] = 1500
 
+    cfg_ddpg["actor_learning_rate"] = 1e-6   # actor learning rate
+    cfg_ddpg["critic_learning_rate"] = 1e-6   # critic learning rate
     # cfg_ddpg["learning_rate_scheduler"] = StepLR
     # cfg_ddpg["learning_rate_scheduler_kwargs"] = {"step_size": 1000, "gamma": 0.95}
 
-    cfg_trainer = {"timesteps": 100000, "headless": True}
+    cfg_trainer = {"timesteps": 20000, "headless": True, 'num_updates':5}
 
     if pretrain:
         models_ddpg = MLPs.load_models(
